@@ -1,0 +1,142 @@
+{
+  "design_system": {
+    "identity": {
+      "name": "MarketAI",
+      "vibe": "Command Center",
+      "archetype": "The Performance Pro",
+      "emotional_goal": "Control, Intelligence, Precision",
+      "theme_mode": "dark"
+    },
+    "typography": {
+      "font_family": {
+        "headings": "Outfit, sans-serif",
+        "body": "Manrope, sans-serif",
+        "mono": "JetBrains Mono, monospace"
+      },
+      "scale": {
+        "h1": "text-5xl md:text-6xl font-bold tracking-tight leading-none",
+        "h2": "text-4xl md:text-5xl font-semibold tracking-tight",
+        "h3": "text-2xl md:text-3xl font-medium",
+        "body_lg": "text-lg leading-relaxed text-muted-foreground",
+        "body_base": "text-base leading-relaxed text-muted-foreground",
+        "caption": "text-sm font-medium tracking-wide uppercase text-muted-foreground/70"
+      },
+      "rules": [
+        "Use Outfit for all Headings (H1-H3).",
+        "Use Manrope for body text and UI elements.",
+        "Never use Inter for Headings.",
+        "Headings must be Pure White (#FFFFFF).",
+        "Body text should be Zinc-400 or Zinc-500 for hierarchy.",
+        "Use JetBrains Mono for data values, code snippets, or API keys."
+      ]
+    },
+    "colors": {
+      "palette": {
+        "background": "#020817",
+        "foreground": "#F8FAFC",
+        "card": "#0B0F19",
+        "card_foreground": "#F8FAFC",
+        "popover": "#0B0F19",
+        "popover_foreground": "#F8FAFC",
+        "primary": "#3B82F6",
+        "primary_foreground": "#FFFFFF",
+        "secondary": "#1E293B",
+        "secondary_foreground": "#F8FAFC",
+        "muted": "#1E293B",
+        "muted_foreground": "#94A3B8",
+        "accent": "#1E293B",
+        "accent_foreground": "#F8FAFC",
+        "destructive": "#EF4444",
+        "destructive_foreground": "#FFFFFF",
+        "border": "#1E293B",
+        "input": "#1E293B",
+        "ring": "#3B82F6"
+      },
+      "special_accents": {
+        "ai_glow": "#6366F1",
+        "success_data": "#10B981",
+        "warning_data": "#F59E0B",
+        "error_data": "#EF4444"
+      },
+      "gradients": {
+        "hero_glow": "radial-gradient(circle at center, rgba(59, 130, 246, 0.15) 0%, transparent 70%)",
+        "active_border": "linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent)"
+      }
+    },
+    "layout": {
+      "spacing_system": "Generous (2x standard). Use p-6, p-8, p-12 for containers.",
+      "grid_strategy": "Bento Grid (Mode B for Dashboards, Mode A for Marketing)",
+      "container_rules": [
+        "Dashboard Widgets: col-span-1 to col-span-3 based on importance.",
+        "Marketing Sections: Use asymmetric grid (e.g., 8 col vs 4 col).",
+        "Never center-align long text blocks."
+      ]
+    },
+    "components": {
+      "cards": {
+        "style": "Flat, 1px border, no shadow by default.",
+        "bg": "bg-card/50 backdrop-blur-sm",
+        "border": "border-white/5",
+        "hover": "hover:border-primary/50 transition-colors duration-300"
+      },
+      "buttons": {
+        "primary": "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_15px_rgba(59,130,246,0.5)] rounded-md font-medium px-6 py-3",
+        "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-md font-medium px-6 py-3",
+        "outline": "border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md font-medium px-6 py-3"
+      },
+      "inputs": {
+        "style": "bg-input/50 border-transparent focus:border-primary focus:ring-1 focus:ring-primary rounded-md h-11"
+      },
+      "navigation": {
+        "sidebar": "fixed left-0 top-0 h-full w-64 bg-background/95 backdrop-blur-xl border-r border-border/40 z-50",
+        "header": "sticky top-0 w-full h-16 bg-background/80 backdrop-blur-lg border-b border-border/40 z-40"
+      }
+    },
+    "visual_enhancers": {
+      "glassmorphism": "backdrop-blur-xl bg-white/5 border border-white/10",
+      "shadows": "shadow-2xl shadow-black/50",
+      "radius": "rounded-xl",
+      "micro_interactions": "scale-95 click, -translate-y-1 hover"
+    },
+    "media": {
+      "icons": "Lucide React (default), Phosphor Icons (for dashboard density)",
+      "images": {
+        "hero_bg": "https://images.unsplash.com/photo-1771013304380-dfaf9f928de6?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "abstract_texture": "https://images.unsplash.com/photo-1770520216375-28ff9063bd10?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "ai_connection": "https://images.pexels.com/photos/8386440/pexels-photo-8386440.jpeg",
+        "team_meeting": "https://images.unsplash.com/photo-1758691737543-09a1b2b715fa?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "business_woman": "https://images.unsplash.com/photo-1771240730126-594a8ab66be1?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "logo_placeholder": "https://images.unsplash.com/photo-1569293673783-9959d9882dac?crop=entropy&cs=srgb&fm=jpg&q=85"
+      }
+    },
+    "motion": {
+      "libraries": ["framer-motion"],
+      "guidelines": [
+        "Use staggered entrance for dashboard cards.",
+        "Use layoutId for shared element transitions.",
+        "Hover states must be instantaneous (duration-200).",
+        "Page transitions: fade in + slight slide up."
+      ]
+    },
+    "charts": {
+      "library": "Recharts (via Shadcn Charts)",
+      "palette": ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"],
+      "style": "Minimalist, no grid lines (or very subtle), tooltip with glassmorphism."
+    },
+    "universal_guidelines": [
+      "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+      "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+      "Create depth through layered design elements with z-index hierarchy.",
+      "Use glass-morphism effects with backdrop filters (12-24px blur).",
+      "You MUST NOT apply universal transition. Eg: transition: all.",
+      "You MUST NOT center align the app container.",
+      "Always use modern button styles (sharp or slightly rounded).",
+      "NEVER use AI assistant Emoji characters.",
+      "Every interaction needs micro-animations.",
+      "Use 2-3x more spacing than feels comfortable.",
+      "Use 'sonner' for toasts.",
+      "Components MUST use named exports.",
+      "Pages MUST use default exports."
+    ]
+  }
+}

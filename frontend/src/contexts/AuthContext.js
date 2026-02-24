@@ -10,18 +10,25 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem("marketai_user");
+      return stored ? JSON.parse(stored) : null;
+    } catch { return null; }
+  });
   const [loading, setLoading] = useState(true);
 
   const loadUser = useCallback(async () => {
     const token = localStorage.getItem("marketai_token");
-    if (!token) { setLoading(false); return; }
+    if (!token) { setUser(null); setLoading(false); return; }
     try {
       const res = await authAPI.me();
       setUser(res.data);
+      localStorage.setItem("marketai_user", JSON.stringify(res.data));
     } catch {
       localStorage.removeItem("marketai_token");
       localStorage.removeItem("marketai_user");
+      setUser(null);
     } finally {
       setLoading(false);
     }

@@ -13,9 +13,11 @@ API.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
-      localStorage.removeItem("marketai_token");
-      localStorage.removeItem("marketai_user");
-      window.location.href = "/login";
+      const isAuthCheck = err.config?.url?.includes("/auth/me");
+      if (!isAuthCheck) {
+        localStorage.removeItem("marketai_token");
+        localStorage.removeItem("marketai_user");
+      }
     }
     return Promise.reject(err);
   }

@@ -25,10 +25,12 @@ export const AuthProvider = ({ children }) => {
       const res = await authAPI.me();
       setUser(res.data);
       localStorage.setItem("marketai_user", JSON.stringify(res.data));
-    } catch {
-      localStorage.removeItem("marketai_token");
-      localStorage.removeItem("marketai_user");
-      setUser(null);
+    } catch (error) {
+      if (error.response?.status === 401) {
+        localStorage.removeItem("marketai_token");
+        localStorage.removeItem("marketai_user");
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -56,6 +58,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem("marketai_token");
     localStorage.removeItem("marketai_user");
     setUser(null);
+    window.location.href = "/login";
   };
 
   return (

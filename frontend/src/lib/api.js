@@ -1,6 +1,8 @@
 import axios from "axios";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+if (!BACKEND_URL) throw new Error("REACT_APP_BACKEND_URL is not set");
+
 const API = axios.create({ baseURL: `${BACKEND_URL}/api` });
 
 API.interceptors.request.use((config) => {
@@ -17,6 +19,7 @@ API.interceptors.response.use(
       if (!isAuthCheck) {
         localStorage.removeItem("marketai_token");
         localStorage.removeItem("marketai_user");
+        window.location.href = "/login";
       }
     }
     return Promise.reject(err);

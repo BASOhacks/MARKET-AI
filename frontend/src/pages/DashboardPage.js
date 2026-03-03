@@ -9,6 +9,7 @@ import {
   ArrowRight, Sparkles, AlertTriangle, Trophy, Zap
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 
 const insightIcons = { warning: AlertTriangle, opportunity: Lightbulb, tip: Zap, win: Trophy };
 const insightColors = { warning: "text-yellow-500", opportunity: "text-purple-400", tip: "text-blue-400", win: "text-emerald-400" };
@@ -30,6 +31,7 @@ export default function DashboardPage() {
         setAnalytics(anaRes.data);
       } catch (err) {
         console.error(err);
+        toast.error("Failed to load dashboard data");
       } finally {
         setLoading(false);
       }
@@ -44,10 +46,10 @@ export default function DashboardPage() {
   );
 
   const kpis = [
-    { label: "Total Revenue", value: `$${(analytics?.total_revenue || 0).toLocaleString()}`, icon: DollarSign, change: "+12.5%", up: true },
-    { label: "Total Reach", value: (analytics?.total_reach || 0).toLocaleString(), icon: Eye, change: "+8.2%", up: true },
-    { label: "Conversions", value: (analytics?.total_conversions || 0).toLocaleString(), icon: MousePointerClick, change: "+5.1%", up: true },
-    { label: "ROI", value: `${analytics?.roi || 0}%`, icon: TrendingUp, change: analytics?.roi > 0 ? "Positive" : "Negative", up: analytics?.roi > 0 },
+    { label: "Total Revenue", value: `$${(analytics?.total_revenue || 0).toLocaleString()}`, icon: DollarSign, up: analytics?.total_revenue > 0 },
+    { label: "Total Reach", value: (analytics?.total_reach || 0).toLocaleString(), icon: Eye, up: analytics?.total_reach > 0 },
+    { label: "Conversions", value: (analytics?.total_conversions || 0).toLocaleString(), icon: MousePointerClick, up: analytics?.total_conversions > 0 },
+    { label: "ROI", value: `${analytics?.roi || 0}%`, icon: TrendingUp, up: analytics?.roi > 0 },
   ];
 
   const quickActions = [
@@ -64,7 +66,6 @@ export default function DashboardPage() {
         <p className="text-muted-foreground mt-1">Your marketing command center at a glance</p>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
           <motion.div key={kpi.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
@@ -76,7 +77,6 @@ export default function DashboardPage() {
                   </div>
                   <span className={`text-xs font-medium mono ${kpi.up ? 'text-emerald-400' : 'text-red-400'}`}>
                     {kpi.up ? <TrendingUp className="w-3 h-3 inline mr-1" /> : <TrendingDown className="w-3 h-3 inline mr-1" />}
-                    {kpi.change}
                   </span>
                 </div>
                 <p className="text-2xl font-bold mono">{kpi.value}</p>
@@ -87,18 +87,13 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Quick Actions */}
       <div>
         <h2 className="text-lg font-semibold mb-4" style={{ fontFamily: 'Outfit' }}>Quick Actions</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {quickActions.map((action) => (
-            <Button
-              key={action.label}
-              variant="outline"
-              onClick={() => navigate(action.to)}
+            <Button key={action.label} variant="outline" onClick={() => navigate(action.to)}
               data-testid={`quick-action-${action.label.toLowerCase().replace(/\s/g, '-')}`}
-              className="h-auto py-4 px-4 flex flex-col items-center gap-2 bg-card/30 border-white/5 hover:border-primary/40"
-            >
+              className="h-auto py-4 px-4 flex flex-col items-center gap-2 bg-card/30 border-white/5 hover:border-primary/40">
               <div className={`w-10 h-10 rounded-lg ${action.color} flex items-center justify-center`}>
                 <action.icon className="w-5 h-5" />
               </div>
@@ -109,7 +104,6 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Stats Summary */}
         <Card className="bg-card/50 border-white/5">
           <CardHeader>
             <CardTitle className="text-base font-semibold" style={{ fontFamily: 'Outfit' }}>Overview</CardTitle>
@@ -132,7 +126,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Recent Insights */}
         <Card className="bg-card/50 border-white/5">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base font-semibold" style={{ fontFamily: 'Outfit' }}>Recent Insights</CardTitle>
@@ -162,7 +155,6 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Channel Performance */}
       {analytics?.channels?.length > 0 && (
         <Card className="bg-card/50 border-white/5">
           <CardHeader>

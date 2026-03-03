@@ -18,29 +18,27 @@ import SettingsPage from "@/pages/SettingsPage";
 import BillingPage from "@/pages/BillingPage";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 
+const LoadingSpinner = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+  </div>
+);
+
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
-  if (!user) return <Navigate to="/login" />;
+  if (loading) return <LoadingSpinner />;
+  if (!user) return <Navigate to="/login" replace />;
   return children;
 };
 
 const AppRoutes = () => {
   const { user, loading } = useAuth();
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  if (loading) return <LoadingSpinner />;
   return (
     <Routes>
-      <Route path="/" element={user ? <Navigate to="/dashboard" /> : <LandingPage />} />
-      <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
-      <Route path="/signup" element={user ? <Navigate to="/dashboard" /> : <SignupPage />} />
+      <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
+      <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
+      <Route path="/signup" element={user ? <Navigate to="/dashboard" replace /> : <SignupPage />} />
       <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout><DashboardPage /></DashboardLayout></ProtectedRoute>} />
       <Route path="/content" element={<ProtectedRoute><DashboardLayout><ContentGeneratorPage /></DashboardLayout></ProtectedRoute>} />
       <Route path="/campaigns" element={<ProtectedRoute><DashboardLayout><CampaignsPage /></DashboardLayout></ProtectedRoute>} />
@@ -50,6 +48,7 @@ const AppRoutes = () => {
       <Route path="/channels" element={<ProtectedRoute><DashboardLayout><ChannelsPage /></DashboardLayout></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><DashboardLayout><SettingsPage /></DashboardLayout></ProtectedRoute>} />
       <Route path="/billing" element={<ProtectedRoute><DashboardLayout><BillingPage /></DashboardLayout></ProtectedRoute>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 };

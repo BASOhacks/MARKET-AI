@@ -1,11 +1,16 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import json
+import random
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -20,7 +25,9 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # Config
-JWT_SECRET = os.environ.get('JWT_SECRET', str(uuid.uuid4()))
+JWT_SECRET = os.environ.get('JWT_SECRET')
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is not set. Server cannot start.")
 JWT_ALGORITHM = "HS256"
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY')
@@ -31,6 +38,10 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 app = FastAPI()
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 api_router = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -39,9 +50,18 @@ logger = logging.getLogger(__name__)
 # ==================== MODELS ====================
 
 class UserRegister(BaseModel):
-    name: str
+    name: str = Field(min_length=2, max_length=100)
     email: str
-    password: str
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator('password')
+    @classmethod
+    def password_strength(cls, v):
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one number')
+        return v
 
 class UserLogin(BaseModel):
     email: str
@@ -109,6 +129,9 @@ def create_token(user_id: str, email: str) -> str:
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
+def mask_phone(phone: str) -> str:
+    return phone[:3] + "****" + phone[-2:] if len(phone) > 5 else "****"
+
 async def get_current_user(request: Request) -> dict:
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
@@ -136,7 +159,8 @@ PLANS = {
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/register")
-async def register(data: UserRegister):
+@limiter.limit("5/minute")
+async def register(request: Request, data: UserRegister):
     existing = await db.users.find_one({"email": data.email.lower()})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -150,7 +174,6 @@ async def register(data: UserRegister):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(user_doc)
-    # Create default workspace
     ws_id = str(uuid.uuid4())
     await db.workspaces.insert_one({
         "id": ws_id, "name": f"{data.name}'s Workspace",
@@ -161,13 +184,13 @@ async def register(data: UserRegister):
         "user_id": user_id, "role": "owner",
         "created_at": datetime.now(timezone.utc).isoformat()
     })
-    # Seed demo channels and analytics
     await seed_demo_data(user_id, ws_id)
     token = create_token(user_id, data.email.lower())
     return {"token": token, "user": {"id": user_id, "name": data.name, "email": data.email.lower(), "plan": "free"}}
 
 @api_router.post("/auth/login")
-async def login(data: UserLogin):
+@limiter.limit("10/minute")
+async def login(request: Request, data: UserLogin):
     user = await db.users.find_one({"email": data.email.lower()}, {"_id": 0})
     if not user or not verify_password(data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -344,7 +367,6 @@ async def analytics_trends(user: dict = Depends(get_current_user)):
     snapshots = await db.analytics_snapshots.find(
         {"workspace_id": ws["workspace_id"]}, {"_id": 0}
     ).sort("date", 1).to_list(1000)
-    # Group by date
     daily = {}
     for s in snapshots:
         d = s.get("date", "")[:10]
@@ -370,7 +392,6 @@ async def generate_insights(user: dict = Depends(get_current_user)):
     ws = await db.workspace_members.find_one({"user_id": user["id"]}, {"_id": 0})
     if not ws:
         raise HTTPException(status_code=400, detail="No workspace found")
-    # Get analytics data for context
     snapshots = await db.analytics_snapshots.find({"workspace_id": ws["workspace_id"]}, {"_id": 0}).to_list(100)
     campaigns = await db.campaigns.find({"user_id": user["id"]}, {"_id": 0}).to_list(50)
     analytics_summary = []
@@ -396,8 +417,6 @@ Return ONLY a JSON array like: [{{"type":"warning","title":"...","description":"
             system_message="You are a marketing analytics AI. Analyze data and provide actionable insights. Always respond with valid JSON."
         ).with_model("gemini", "gemini-2.5-flash")
         response = await chat.send_message(UserMessage(text=prompt))
-        import json
-        # Try to parse JSON from response
         clean = response.strip()
         if clean.startswith("```"):
             clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
@@ -479,7 +498,6 @@ async def connect_channel(data: ChannelConnect, user: dict = Depends(get_current
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.channels.insert_one(doc)
-    # Seed analytics for new channel
     await seed_channel_analytics(ws["workspace_id"], data.platform)
     del doc["_id"]
     return doc
@@ -514,7 +532,6 @@ async def create_schedule(data: ScheduleCreate, user: dict = Depends(get_current
 @api_router.get("/schedule")
 async def list_schedule(user: dict = Depends(get_current_user)):
     items = await db.scheduled_posts.find({"user_id": user["id"]}, {"_id": 0}).sort("scheduled_at", 1).to_list(200)
-    # Enrich with content data
     for item in items:
         content = await db.content.find_one({"id": item.get("content_id")}, {"_id": 0})
         if content:
@@ -539,14 +556,11 @@ async def create_checkout(data: CheckoutRequest, request: Request):
     plan = PLANS[data.plan_id]
     if plan["price"] == 0:
         raise HTTPException(status_code=400, detail="Free plan doesn't require payment")
-    
     host_url = str(request.base_url).rstrip("/")
     webhook_url = f"{host_url}/api/webhook/stripe"
     stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
-    
     success_url = f"{data.origin_url}/billing?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{data.origin_url}/billing"
-    
     checkout_req = CheckoutSessionRequest(
         amount=float(plan["price"]),
         currency=plan["currency"],
@@ -555,8 +569,6 @@ async def create_checkout(data: CheckoutRequest, request: Request):
         metadata={"user_id": user["id"], "plan_id": data.plan_id, "email": user["email"]}
     )
     session = await stripe_checkout.create_checkout_session(checkout_req)
-    
-    # Create payment transaction record
     tx_doc = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
@@ -569,7 +581,6 @@ async def create_checkout(data: CheckoutRequest, request: Request):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.payment_transactions.insert_one(tx_doc)
-    
     return {"url": session.url, "session_id": session.session_id}
 
 @api_router.get("/payments/status/{session_id}")
@@ -578,10 +589,7 @@ async def payment_status(session_id: str, request: Request):
     host_url = str(request.base_url).rstrip("/")
     webhook_url = f"{host_url}/api/webhook/stripe"
     stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
-    
     status = await stripe_checkout.get_checkout_status(session_id)
-    
-    # Update payment transaction
     tx = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
     if tx and tx.get("payment_status") != "paid":
         new_status = "paid" if status.payment_status == "paid" else status.payment_status
@@ -594,7 +602,6 @@ async def payment_status(session_id: str, request: Request):
                 {"id": user["id"]},
                 {"$set": {"plan": tx["plan"]}}
             )
-    
     return {
         "status": status.status,
         "payment_status": status.payment_status,
@@ -606,6 +613,8 @@ async def payment_status(session_id: str, request: Request):
 async def stripe_webhook(request: Request):
     body = await request.body()
     sig = request.headers.get("Stripe-Signature", "")
+    if not sig:
+        raise HTTPException(status_code=400, detail="Missing Stripe signature")
     try:
         host_url = str(request.base_url).rstrip("/")
         webhook_url = f"{host_url}/api/webhook/stripe"
@@ -621,13 +630,14 @@ async def stripe_webhook(request: Request):
                 if tx.get("user_id"):
                     await db.users.update_one({"id": tx["user_id"]}, {"$set": {"plan": tx["plan"]}})
         return {"received": True}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Webhook error: {e}")
-        return {"received": True}
+        raise HTTPException(status_code=400, detail="Webhook processing failed")
 
 @api_router.post("/payments/mobile")
 async def mobile_payment(data: MobilePaymentRequest, request: Request):
-    """Placeholder for MTN MoMo and Airtel Money integration"""
     user = await get_current_user(request)
     if data.plan_id not in PLANS:
         raise HTTPException(status_code=400, detail="Invalid plan")
@@ -640,7 +650,7 @@ async def mobile_payment(data: MobilePaymentRequest, request: Request):
         "currency": "usd",
         "plan": data.plan_id,
         "provider": data.provider,
-        "phone_number": data.phone_number,
+        "phone_number": mask_phone(data.phone_number),
         "status": "initiated",
         "payment_status": "pending",
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -697,10 +707,7 @@ async def dashboard_summary(user: dict = Depends(get_current_user)):
 
 # ==================== SEED DEMO DATA ====================
 
-import random
-
 async def seed_channel_analytics(workspace_id: str, platform: str):
-    """Seed analytics data for a newly connected channel"""
     base_date = datetime.now(timezone.utc) - timedelta(days=30)
     channel_multipliers = {
         "instagram": {"reach": 2500, "engagement": 180, "clicks": 90, "conversions": 8, "spend": 25, "revenue": 120},
@@ -735,7 +742,6 @@ async def seed_channel_analytics(workspace_id: str, platform: str):
         await db.analytics_snapshots.insert_many(docs)
 
 async def seed_demo_data(user_id: str, workspace_id: str):
-    """Seed demo data for new users"""
     default_channels = ["instagram", "facebook", "linkedin", "google_ads"]
     for platform in default_channels:
         channel_id = str(uuid.uuid4())
@@ -746,7 +752,6 @@ async def seed_demo_data(user_id: str, workspace_id: str):
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         await seed_channel_analytics(workspace_id, platform)
-    # Seed some insights
     demo_insights = [
         {"type": "warning", "title": "Instagram engagement dropping", "description": "Your Instagram engagement rate has decreased by 15% over the past week. Consider posting more interactive content like polls and questions."},
         {"type": "opportunity", "title": "LinkedIn audience growing", "description": "Your LinkedIn follower growth is 3x higher than average. This is the perfect time to launch a thought leadership campaign."},
@@ -765,12 +770,15 @@ async def seed_demo_data(user_id: str, workspace_id: str):
 
 app.include_router(api_router)
 
+allowed_origins = os.environ.get('CORS_ORIGINS')
+if not allowed_origins:
+    raise RuntimeError("CORS_ORIGINS environment variable is not set.")
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=allowed_origins.split(','),
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 @app.on_event("shutdown")

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { paymentsAPI } from "@/lib/api";
@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -45,26 +44,15 @@ export default function BillingPage() {
   const [mobilePhone, setMobilePhone] = useState("");
   const [mobileLoading, setMobileLoading] = useState(false);
 
-  useEffect(() => {
-    loadHistory();
-    const sessionId = searchParams.get("session_id");
-    if (sessionId) {
-      pollPaymentStatus(sessionId);
-    }
-  }, [searchParams]);
-
-  const loadHistory = async () => {
+  const loadHistory = useCallback(async () => {
     try {
       const res = await paymentsAPI.history();
       setHistory(res.data);
     } catch (err) { console.error(err); }
-  };
+  }, []);
 
-  const pollPaymentStatus = async (sessionId, attempts = 0) => {
-    if (attempts >= 5) {
-      setPollingStatus("timeout");
-      return;
-    }
+  const pollPaymentStatus = useCallback(async (sessionId, attempts = 0) => {
+    if (attempts >= 5) { setPollingStatus("timeout"); return; }
     setPollingStatus("checking");
     try {
       const res = await paymentsAPI.status(sessionId);
@@ -82,7 +70,13 @@ export default function BillingPage() {
     } catch (err) {
       setPollingStatus("error");
     }
-  };
+  }, [loadUser, loadHistory]);
+
+  useEffect(() => {
+    loadHistory();
+    const sessionId = searchParams.get("session_id");
+    if (sessionId) pollPaymentStatus(sessionId);
+  }, [searchParams, loadUser, loadHistory, pollPaymentStatus]);
 
   const handleStripeCheckout = async (planId) => {
     if (planId === "free") return;
@@ -92,9 +86,7 @@ export default function BillingPage() {
         plan_id: planId,
         origin_url: window.location.origin,
       });
-      if (res.data.url) {
-        window.location.href = res.data.url;
-      }
+      if (res.data.url) window.location.href = res.data.url;
     } catch (err) {
       toast.error(err.response?.data?.detail || "Checkout failed");
     } finally { setLoading(false); }
@@ -102,6 +94,7 @@ export default function BillingPage() {
 
   const handleMobilePayment = async () => {
     if (!mobilePhone) return toast.error("Please enter a phone number");
+    if (!/^\+?[\d\s\-]{10,15}$/.test(mobilePhone)) return toast.error("Please enter a valid phone number");
     setMobileLoading(true);
     try {
       const res = await paymentsAPI.mobile({
@@ -124,7 +117,6 @@ export default function BillingPage() {
         <p className="text-muted-foreground mt-1">Manage your subscription and payment methods</p>
       </div>
 
-      {/* Payment Status Banner */}
       {pollingStatus === "checking" && (
         <Card className="bg-blue-500/10 border-blue-500/20">
           <CardContent className="p-4 flex items-center gap-3">
@@ -142,7 +134,6 @@ export default function BillingPage() {
         </Card>
       )}
 
-      {/* Current Plan */}
       <Card className="bg-card/50 border-white/5">
         <CardContent className="p-6 flex items-center justify-between">
           <div>
@@ -153,7 +144,6 @@ export default function BillingPage() {
         </CardContent>
       </Card>
 
-      {/* Plans */}
       <div>
         <h2 className="text-lg font-semibold mb-4" style={{ fontFamily: 'Outfit' }}>Choose Your Plan</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -161,12 +151,7 @@ export default function BillingPage() {
             const Icon = plan.icon;
             const isCurrent = user?.plan === plan.id;
             return (
-              <Card
-                key={plan.id}
-                className={`bg-card/50 card-hover ${
-                  plan.highlighted ? 'border-primary/50 shadow-[0_0_20px_rgba(59,130,246,0.1)]' : 'border-white/5'
-                }`}
-              >
+              <Card key={plan.id} className={`bg-card/50 card-hover ${plan.highlighted ? 'border-primary/50 shadow-[0_0_20px_rgba(59,130,246,0.1)]' : 'border-white/5'}`}>
                 <CardContent className="p-6">
                   <Icon className={`w-8 h-8 ${plan.color} mb-4`} />
                   <h3 className="text-lg font-semibold">{plan.name}</h3>
@@ -187,21 +172,14 @@ export default function BillingPage() {
                     <Button disabled className="w-full" variant="outline">Free Forever</Button>
                   ) : (
                     <div className="space-y-2">
-                      <Button
-                        onClick={() => handleStripeCheckout(plan.id)}
-                        disabled={loading}
+                      <Button onClick={() => handleStripeCheckout(plan.id)} disabled={loading}
                         className={`w-full ${plan.highlighted ? 'bg-primary text-white hover:bg-primary/90' : 'bg-secondary hover:bg-secondary/80'}`}
-                        data-testid={`checkout-${plan.id}-btn`}
-                      >
+                        data-testid={`checkout-${plan.id}-btn`}>
                         <CreditCard className="w-4 h-4 mr-2" />
                         {loading ? "Processing..." : "Pay with Card"}
                       </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => { setMobilePlan(plan.id); setShowMobile(true); }}
-                        className="w-full text-xs"
-                        data-testid={`mobile-pay-${plan.id}-btn`}
-                      >
+                      <Button variant="outline" onClick={() => { setMobilePlan(plan.id); setShowMobile(true); }}
+                        className="w-full text-xs" data-testid={`mobile-pay-${plan.id}-btn`}>
                         <Smartphone className="w-4 h-4 mr-2" /> Mobile Money
                       </Button>
                     </div>
@@ -213,7 +191,6 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {/* Mobile Money Dialog */}
       <Dialog open={showMobile} onOpenChange={setShowMobile}>
         <DialogContent className="bg-card border-border/40 max-w-sm">
           <DialogHeader>
@@ -234,18 +211,16 @@ export default function BillingPage() {
             </div>
             <div className="space-y-2">
               <Label>Phone Number</Label>
-              <Input
-                value={mobilePhone} onChange={(e) => setMobilePhone(e.target.value)}
-                placeholder="+256 700 000 000"
-                data-testid="mobile-phone-input"
-                className="bg-input/50 border-transparent focus:border-primary h-11"
-              />
+              <Input value={mobilePhone} onChange={(e) => setMobilePhone(e.target.value)}
+                placeholder="+256 700 000 000" data-testid="mobile-phone-input"
+                className="bg-input/50 border-transparent focus:border-primary h-11" />
             </div>
             <div className="p-3 rounded-lg bg-secondary/30 text-sm">
               <p className="text-muted-foreground">Plan: <span className="text-foreground font-medium capitalize">{mobilePlan}</span></p>
               <p className="text-muted-foreground">Amount: <span className="text-foreground font-medium">${plans.find(p => p.id === mobilePlan)?.price || 0}</span></p>
             </div>
-            <Button onClick={handleMobilePayment} disabled={mobileLoading} className="w-full bg-primary text-white hover:bg-primary/90" data-testid="submit-mobile-payment-btn">
+            <Button onClick={handleMobilePayment} disabled={mobileLoading}
+              className="w-full bg-primary text-white hover:bg-primary/90" data-testid="submit-mobile-payment-btn">
               {mobileLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Phone className="w-4 h-4 mr-2" />}
               {mobileLoading ? "Processing..." : "Send Payment Request"}
             </Button>
@@ -253,7 +228,6 @@ export default function BillingPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Payment History */}
       <Card className="bg-card/50 border-white/5">
         <CardHeader>
           <CardTitle className="text-base" style={{ fontFamily: 'Outfit' }}>Payment History</CardTitle>
